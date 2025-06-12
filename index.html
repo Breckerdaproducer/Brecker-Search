@@ -230,7 +230,7 @@
                         <div class="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
                             <i class="fas fa-search text-white text-sm"></i>
                         </div>
-                        <h2 class="text-lg font-semibold brecker-logo">Brecker Search</h2>
+                        <h2 class="text-lg font-semibold brecker-logo">Brecker AI</h2>
                     </div>
                     <button 
                         @click="sidebarOpen = false"
@@ -330,7 +330,7 @@
                         <div class="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
                             <i class="fas fa-search text-white text-sm"></i>
                         </div>
-                        <h1 class="text-xl font-bold brecker-logo">Brecker Search</h1>
+                        <h1 class="text-xl font-bold brecker-logo">Brecker AI</h1>
                     </div>
                 </div>
                 
@@ -358,7 +358,7 @@
                                 <textarea 
                                     id="searchInput" 
                                     rows="1"
-                                    placeholder="Ask Brecker Search anything..."
+                                    placeholder="Ask Brecker AI anything..."
                                     class="w-full py-4 pl-6 pr-14 bg-white dark:bg-chatgpt-dark-input-bg border border-chatgpt-border dark:border-chatgpt-dark-border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none overflow-hidden text-gray-800 dark:text-gray-100 shadow-sm"
                                     style="max-height: 200px;"
                                 ></textarea>
@@ -371,7 +371,7 @@
                                 </button>
                             </div>
                             <div class="text-xs text-center text-gray-500 dark:text-gray-400 mt-3">
-                                Brecker Search may produce inaccurate information about people, places, or facts.
+                                Brecker AI may produce inaccurate information about people, places, or facts.
                             </div>
                         </form>
                     </div>
@@ -422,6 +422,7 @@
                 
                 this.conversations = this.loadConversations();
                 this.currentConversationId = null;
+                this.currentMessages = []; // <<< ADDED THIS LINE
                 this.settings = this.loadSettings();
                 
                 this.initializeEventListeners();
@@ -546,10 +547,25 @@
             }
 
             startNewConversation() {
-                this.saveCurrentConversation();
+                this.saveCurrentConversation(); // Save previous one if exists
                 this.currentConversationId = this.generateId();
+                this.currentMessages = []; // <<< MODIFIED: Reset for new conversation
                 this.showWelcomeScreen();
                 this.addConversationToSidebar("New conversation", this.currentConversationId, true);
+
+                const existingIndex = this.conversations.findIndex(c => c.id === this.currentConversationId);
+                if (existingIndex === -1) {
+                    const now = new Date().toISOString();
+                    const newConv = {
+                        id: this.currentConversationId,
+                        title: "New conversation",
+                        messagesHtml: this.messagesContainer.innerHTML,
+                        rawMessages: [],
+                        lastUpdated: now,
+                        createdAt: now
+                    };
+                    this.conversations.push(newConv);
+                }
             }
 
             showWelcomeScreen() {
@@ -559,8 +575,8 @@
                             <div class="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
                                 <i class="fas fa-search text-white text-2xl"></i>
                             </div>
-                            <h1 class="text-4xl md:text-5xl font-bold brecker-logo mb-4">Brecker Search</h1>
-                            <p class="text-gray-600 dark:text-gray-300 text-lg max-w-md mx-auto">Your intelligent AI search companion. Ask me anything and I'll find real information, images, and videos for you.</p>
+                            <h1 class="text-4xl md:text-5xl font-bold brecker-logo mb-4">Brecker AI</h1>
+                            <p class="text-gray-600 dark:text-gray-300 text-lg max-w-md mx-auto">Your intelligent AI assistant. Ask me anything! I can chat, search for information, find images, and look up videos.</p>
                         </div>
                         
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-2xl">
@@ -667,10 +683,16 @@
                 this.currentConversationId = id;
                 
                 const conversation = this.conversations.find(c => c.id === id);
-                if (conversation && conversation.messages) {
-                    this.messagesContainer.innerHTML = conversation.messages;
+                if (conversation) {
+                    this.messagesContainer.innerHTML = conversation.messagesHtml || '';
+                    this.currentMessages = conversation.rawMessages || []; // <<< MODIFIED: Load rawMessages
+
+                    if (this.messagesContainer.innerHTML.trim() === '' && this.currentMessages.length === 0) {
+                        this.showWelcomeScreen();
+                    }
                 } else {
                     this.showWelcomeScreen();
+                    this.currentMessages = [];
                 }
                 
                 this.updateSidebarActiveState(id);
@@ -693,9 +715,10 @@
                 const conversationData = {
                     id: this.currentConversationId,
                     title: title,
-                    messages: this.messagesContainer.innerHTML,
+                    messagesHtml: this.messagesContainer.innerHTML,
+                    rawMessages: this.currentMessages, // <<< ADDED: Store structured messages
                     lastUpdated: now,
-                    createdAt: existingIndex >= 0 ? this.conversations[existingIndex].createdAt : now
+                    createdAt: (existingIndex >= 0 && this.conversations[existingIndex].createdAt) ? this.conversations[existingIndex].createdAt : now
                 };
                 
                 if (existingIndex >= 0) {
@@ -709,9 +732,16 @@
             }
 
             getConversationTitle() {
-                const firstUserMessage = this.messagesContainer.querySelector('.user-message .whitespace-pre-wrap');
-                if (firstUserMessage) {
-                    const text = firstUserMessage.textContent.trim();
+                if (this.currentMessages && this.currentMessages.length > 0) {
+                    const firstUserMsg = this.currentMessages.find(m => m.sender === 'user');
+                    if (firstUserMsg && firstUserMsg.text) {
+                         const text = firstUserMsg.text.trim();
+                         return text.length > 35 ? text.substring(0, 35) + '...' : text;
+                    }
+                }
+                const firstUserMessageElement = this.messagesContainer.querySelector('.user-message .whitespace-pre-wrap');
+                if (firstUserMessageElement) {
+                    const text = firstUserMessageElement.textContent.trim();
                     return text.length > 35 ? text.substring(0, 35) + '...' : text;
                 }
                 return 'New conversation';
@@ -878,6 +908,45 @@
                 }, 3000);
             }
 
+            generateAIResponse(query, conversationHistory) {
+                const lowerQuery = query.toLowerCase().trim();
+                let response = "";
+
+                // 1. Check for memory-based follow-up first
+                const lastMessage = conversationHistory.length > 0 ? conversationHistory[conversationHistory.length - 1] : null;
+
+                if (lowerQuery === "why?" || lowerQuery === "why" || lowerQuery === "elaborate" || lowerQuery === "can you elaborate?") {
+                    if (lastMessage && lastMessage.sender === 'ai' && lastMessage.text) {
+                        // Simple canned response for elaboration
+                        response = "I wish I could elaborate more! My current abilities are focused on finding information. Perhaps try asking in a different way or for specific details?";
+                        return response;
+                    }
+                }
+
+                // 2. Keyword-based responses
+                if (lowerQuery.includes("hello") || lowerQuery.includes("hi")) {
+                    response = "Hello there! How can I assist you today? You can ask me to find information, images, or videos.";
+                } else if (lowerQuery.includes("how are you")) {
+                    response = "I'm a set of code, so I don't have feelings, but I'm functioning optimally! What can I search for you?";
+                } else if (lowerQuery.includes("what can you do") || lowerQuery.includes("help me") || lowerQuery.includes("help")) {
+                    response = "I'm Brecker, your AI assistant. I can search the web, find images, and look for videos based on your requests. I also try to be conversational! Ask me anything.";
+                } else if (lowerQuery.includes("what is your name") || lowerQuery.includes("who are you")) {
+                    response = "I am Brecker AI, an assistant designed to help you find information.";
+                } else if (lowerQuery.includes("thank you") || lowerQuery.includes("thanks")) {
+                    response = "You're welcome! Is there anything else I can help you with?";
+                }
+                // Add more keyword rules as desired
+
+                // 3. If a specific response was generated, return it.
+                if (response) {
+                    return response;
+                }
+
+                // 4. Default response (leading to a search action)
+                // This response indicates the AI will now use its search capabilities for the query.
+                return "Let me check that for you: '" + query + "'. I'll search for information, and if you want images or videos, please specify that in your query.";
+            }
+
             async handleSubmit(e) {
                 e.preventDefault();
                 const query = this.searchInput.value.trim();
@@ -888,18 +957,43 @@
                 this.searchInput.value = '';
                 this.searchInput.style.height = 'auto';
                 this.setLoading(true);
-                
-                try {
-                    await this.performAISearch(query);
-                    this.saveCurrentConversation();
-                } catch (error) {
-                    this.addAIMessage('I encountered an error while searching. Please try again.', 'error');
-                } finally {
-                    this.setLoading(false);
+
+                // 1. Generate and display AI's textual response
+                const aiTextResponse = this.generateAIResponse(query, this.currentMessages);
+                this.addAIMessageToHistory(aiTextResponse);
+                this.addAIMessage(this.escapeHtml(aiTextResponse));
+
+                // 2. Check if the AI's response implies a search should be performed
+                if (aiTextResponse.startsWith("Let me check that for you:")) {
+                    this.addTypingIndicator();
+                    try {
+                        // 3. Execute the actual search and get HTML results
+                        const resultsHtml = await this.executeSearchAndGetResultsHTML(query);
+                        this.removeTypingIndicator();
+                        if (resultsHtml) {
+                            this.addAIMessage(resultsHtml);
+                        }
+                    } catch (error) {
+                        this.removeTypingIndicator();
+                        const errorMessage = 'I encountered an error while searching. Please try again.';
+                        this.addAIMessageToHistory('Error: ' + errorMessage);
+                        this.addAIMessage(errorMessage, 'error');
+                    }
                 }
+
+                this.setLoading(false);
+                this.saveCurrentConversation();
             }
 
-            addUserMessage(message) {
+            addAIMessageToHistory(messageContent) {
+                this.currentMessages.push({ sender: 'ai', text: messageContent, timestamp: new Date() });
+            }
+
+            addUserMessage(message, addToHistory = true) { // <<< MODIFIED SIGNATURE
+                if (addToHistory) { // <<< ADDED CONDITION
+                    this.currentMessages.push({ sender: 'user', text: message, timestamp: new Date() });
+                }
+
                 // Clear welcome screen if it exists
                 const welcomeScreen = this.messagesContainer.querySelector('.py-16');
                 if (welcomeScreen) {
@@ -980,9 +1074,10 @@
                 }
             }
 
-            async performAISearch(query) {
-                this.addTypingIndicator();
-                
+            // Renamed and refactored from performAISearch
+            async executeSearchAndGetResultsHTML(query) {
+                // This method no longer calls addTypingIndicator or removeTypingIndicator.
+                // It focuses on fetching and formatting search results into an HTML string.
                 try {
                     // Determine search type based on query
                     const searchType = this.determineSearchType(query);
@@ -998,12 +1093,12 @@
                         results = await this.searchWeb(query);
                     }
                     
-                    this.removeTypingIndicator();
-                    this.displayAIResults(results, query, searchType);
-                    
+                    // The displayAIResults method already returns an HTML string
+                    return this.displayAIResults(results, query, searchType);
                 } catch (error) {
-                    this.removeTypingIndicator();
-                    this.addAIMessage('I encountered an error while searching. Please try again.', 'error');
+                    console.error('Search execution error:', error);
+                    // Let the error propagate to handleSubmit to be handled there.
+                    throw error;
                 }
             }
 
@@ -1294,6 +1389,7 @@
                 content += `</div>`;
                 
                 this.addAIMessage(content);
+                return content; // Return the HTML content that was added for history
             }
 
             renderWebResults(results) {
