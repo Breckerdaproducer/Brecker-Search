@@ -202,7 +202,7 @@
         }
     </script>
 </head>
-<body class="bg-chatgpt-bg dark:bg-chatgpt-dark-bg transition-colors duration-200" x-data="{ darkMode: localStorage.getItem('darkMode') === 'true', sidebarOpen: false }" :class="{ 'dark': darkMode }" x-init="$watch('darkMode', val => localStorage.setItem('darkMode', val))">
+<body class="bg-chatgpt-bg dark:bg-chatgpt-dark-bg transition-colors duration-200" x-data="{ darkMode: localStorage.getItem('darkMode') === 'true', sidebarOpen: false, aiModeActive: true, toggleAIMode() { this.aiModeActive = !this.aiModeActive; } }" :class="{ 'dark': darkMode }" x-init="$watch('darkMode', val => localStorage.setItem('darkMode', val))">
     <div class="flex h-screen relative">
         <!-- Sidebar Overlay -->
         <div 
@@ -228,9 +228,9 @@
                 <div class="flex items-center justify-between p-4 border-b border-white/20">
                     <div class="flex items-center space-x-3">
                         <div class="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-                            <i class="fas fa-search text-white text-sm"></i>
+                            <i class="fas fa-brain text-white text-sm"></i> <!-- Updated Icon -->
                         </div>
-                        <h2 class="text-lg font-semibold brecker-logo">Brecker AI</h2>
+                        <h2 class="text-lg font-semibold brecker-logo">Brecker AI</h2> <!-- Updated Title -->
                     </div>
                     <button 
                         @click="sidebarOpen = false"
@@ -328,16 +328,26 @@
                     <!-- App Title -->
                     <div class="flex items-center space-x-3">
                         <div class="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-                            <i class="fas fa-search text-white text-sm"></i>
+                            <i class="fas fa-brain text-white text-sm"></i> <!-- Updated Icon -->
                         </div>
-                        <h1 class="text-xl font-bold brecker-logo">Brecker AI</h1>
+                        <h1 class="text-xl font-bold brecker-logo">Brecker AI</h1> <!-- Updated Title -->
                     </div>
                 </div>
                 
-                <!-- Status Indicator -->
-                <div class="flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400">
-                    <div class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                    <span>AI Online</span>
+                <div class="flex items-center space-x-4">
+                    <!-- AI Mode Toggle -->
+                    <button @click="toggleAIMode()"
+                            class="px-3 py-1.5 text-xs font-medium rounded-md transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2"
+                            :class="aiModeActive ? 'bg-blue-500 text-white hover:bg-blue-600 focus:ring-blue-400' : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500 focus:ring-gray-400'">
+                        <span x-text="aiModeActive ? 'AI Assistant Mode' : 'Simple Search Mode'"></span>
+                        <i class="fas ml-2" :class="aiModeActive ? 'fa-brain' : 'fa-search'"></i>
+                    </button>
+
+                    <!-- Status Indicator -->
+                    <div class="flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400">
+                        <div class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                        <span>AI Online</span>
+                    </div>
                 </div>
             </div>
             
@@ -422,32 +432,44 @@
                 
                 this.conversations = this.loadConversations();
                 this.currentConversationId = null;
-                this.currentMessages = []; // <<< ADDED THIS LINE
+                this.currentMessages = [];
                 this.settings = this.loadSettings();
                 
                 this.initializeEventListeners();
                 this.loadSidebar();
                 this.updateStorageInfo();
                 
-                // Load the most recent conversation or create a new one
                 if (this.conversations.length > 0) {
                     const lastConversation = this.conversations[this.conversations.length - 1];
                     this.switchConversation(lastConversation.id);
                 } else {
                     this.startNewConversation();
                 }
+
+                // Watch for Alpine.js aiModeActive changes (alternative to passing it everywhere)
+                // This requires Alpine to be initialized, so it's here.
+                const alpineBodyData = Alpine.$data(document.body);
+                if (alpineBodyData) { // Check if Alpine is ready
+                     Alpine.$watch('aiModeActive', (newValue) => {
+                        this.showNotification(`Switched to ${newValue ? 'AI Assistant' : 'Simple Search'} mode`, 'info');
+                    });
+                } else { // Fallback if Alpine is not ready on constructor (should not happen with DOMContentLoaded)
+                    document.addEventListener('alpine:initialized', () => {
+                         Alpine.$watch('aiModeActive', (newValue) => {
+                             this.showNotification(`Switched to ${newValue ? 'AI Assistant' : 'Simple Search'} mode`, 'info');
+                         });
+                    });
+                }
             }
 
             initializeEventListeners() {
                 this.searchForm.addEventListener('submit', (e) => this.handleSubmit(e));
                 
-                // Auto-resize textarea
                 this.searchInput.addEventListener('input', () => {
                     this.searchInput.style.height = 'auto';
                     this.searchInput.style.height = Math.min(this.searchInput.scrollHeight, 200) + 'px';
                 });
                 
-                // Submit on Enter (without Shift)
                 this.searchInput.addEventListener('keydown', (e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();
@@ -455,17 +477,14 @@
                     }
                 });
 
-                // Auto-save conversations every 30 seconds
                 setInterval(() => {
                     this.saveCurrentConversation();
                 }, 30000);
 
-                // Save before page unload
                 window.addEventListener('beforeunload', () => {
                     this.saveCurrentConversation();
                 });
 
-                // Close sidebar when clicking outside on mobile
                 document.addEventListener('click', (e) => {
                     const sidebar = document.querySelector('.sidebar');
                     const menuTrigger = document.querySelector('.menu-trigger');
@@ -473,7 +492,6 @@
                     if (window.innerWidth < 1024 && 
                         !sidebar.contains(e.target) && 
                         !menuTrigger.contains(e.target)) {
-                        // Close sidebar if clicking outside
                         const alpineData = Alpine.$data(document.body);
                         if (alpineData.sidebarOpen) {
                             alpineData.sidebarOpen = false;
@@ -482,7 +500,6 @@
                 });
             }
 
-            // Storage Management
             loadConversations() {
                 try {
                     const stored = localStorage.getItem('brecker_conversations');
@@ -535,7 +552,6 @@
                     } else {
                         sizeText = `${(totalSize / (1024 * 1024)).toFixed(1)} MB`;
                     }
-                    
                     this.storageInfo.textContent = sizeText;
                 } catch (error) {
                     this.storageInfo.textContent = 'Unknown';
@@ -547,9 +563,9 @@
             }
 
             startNewConversation() {
-                this.saveCurrentConversation(); // Save previous one if exists
+                this.saveCurrentConversation();
                 this.currentConversationId = this.generateId();
-                this.currentMessages = []; // <<< MODIFIED: Reset for new conversation
+                this.currentMessages = [];
                 this.showWelcomeScreen();
                 this.addConversationToSidebar("New conversation", this.currentConversationId, true);
 
@@ -573,10 +589,10 @@
                     <div class="py-16 md:py-24 flex flex-col items-center justify-center text-center px-4">
                         <div class="mb-8">
                             <div class="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                                <i class="fas fa-search text-white text-2xl"></i>
+                                <i class="fas fa-brain text-white text-2xl"></i> <!-- Updated Icon -->
                             </div>
-                            <h1 class="text-4xl md:text-5xl font-bold brecker-logo mb-4">Brecker AI</h1>
-                            <p class="text-gray-600 dark:text-gray-300 text-lg max-w-md mx-auto">Your intelligent AI assistant. Ask me anything! I can chat, search for information, find images, and look up videos.</p>
+                            <h1 class="text-4xl md:text-5xl font-bold brecker-logo mb-4">Brecker AI</h1> <!-- MODIFIED -->
+                            <p class="text-gray-600 dark:text-gray-300 text-lg max-w-md mx-auto">Your intelligent AI assistant. Ask me anything! I can chat, search for information, find images, and look up videos.</p> <!-- MODIFIED -->
                         </div>
                         
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-2xl">
@@ -589,7 +605,6 @@
                                     </div>
                                 </div>
                             </button>
-                            
                             <button onclick="sendQuery('Find videos about machine learning for beginners')" class="bg-gradient-to-r from-green-50 to-blue-50 dark:from-gray-800 dark:to-gray-700 hover:from-green-100 hover:to-blue-100 dark:hover:from-gray-700 dark:hover:to-gray-600 text-gray-800 dark:text-gray-200 py-4 px-6 rounded-xl text-left transition-all duration-200 border border-gray-200 dark:border-gray-600 hover:shadow-md">
                                 <div class="flex items-start space-x-3">
                                     <i class="fas fa-video text-green-500 mt-1"></i>
@@ -599,7 +614,6 @@
                                     </div>
                                 </div>
                             </button>
-                            
                             <button onclick="sendQuery('What is quantum computing and how does it work?')" class="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-gray-800 dark:to-gray-700 hover:from-purple-100 hover:to-pink-100 dark:hover:from-gray-700 dark:hover:to-gray-600 text-gray-800 dark:text-gray-200 py-4 px-6 rounded-xl text-left transition-all duration-200 border border-gray-200 dark:border-gray-600 hover:shadow-md">
                                 <div class="flex items-start space-x-3">
                                     <i class="fas fa-atom text-purple-500 mt-1"></i>
@@ -609,7 +623,6 @@
                                     </div>
                                 </div>
                             </button>
-                            
                             <button onclick="sendQuery('Latest climate change research and data 2024')" class="bg-gradient-to-r from-orange-50 to-red-50 dark:from-gray-800 dark:to-gray-700 hover:from-orange-100 hover:to-red-100 dark:hover:from-gray-700 dark:hover:to-gray-600 text-gray-800 dark:text-gray-200 py-4 px-6 rounded-xl text-left transition-all duration-200 border border-gray-200 dark:border-gray-600 hover:shadow-md">
                                 <div class="flex items-start space-x-3">
                                     <i class="fas fa-globe-americas text-orange-500 mt-1"></i>
@@ -620,7 +633,6 @@
                                 </div>
                             </button>
                         </div>
-                        
                         <div class="mt-8 text-sm text-gray-500 dark:text-gray-400">
                             <i class="fas fa-lightbulb mr-2"></i>
                             Tip: Use the menu button <i class="fas fa-bars mx-1"></i> to access your conversation history
@@ -631,12 +643,9 @@
 
             loadSidebar() {
                 this.chatHistory.innerHTML = '';
-                
-                // Sort conversations by last updated (most recent first)
                 const sortedConversations = [...this.conversations].sort((a, b) => 
                     new Date(b.lastUpdated || b.createdAt) - new Date(a.lastUpdated || a.createdAt)
                 );
-                
                 sortedConversations.forEach(conversation => {
                     this.addConversationToSidebar(conversation.title, conversation.id, false);
                 });
@@ -646,7 +655,6 @@
                 const conversationItem = document.createElement('div');
                 conversationItem.className = 'conversation-item group relative';
                 conversationItem.dataset.id = id;
-                
                 conversationItem.innerHTML = `
                     <button class="flex items-center w-full px-3 py-3 rounded-lg hover:bg-chatgpt-sidebar-hover transition-colors text-sm text-left conversation-btn" onclick="switchToConversation('${id}')">
                         <i class="fas fa-comment mr-3 flex-shrink-0 text-gray-400"></i>
@@ -656,13 +664,11 @@
                         <i class="fas fa-trash text-xs"></i>
                     </button>
                 `;
-                
                 if (isNew) {
                     this.chatHistory.prepend(conversationItem);
                 } else {
                     this.chatHistory.appendChild(conversationItem);
                 }
-                
                 this.updateSidebarActiveState(id);
             }
 
@@ -681,12 +687,10 @@
             switchConversation(id) {
                 this.saveCurrentConversation();
                 this.currentConversationId = id;
-                
                 const conversation = this.conversations.find(c => c.id === id);
                 if (conversation) {
                     this.messagesContainer.innerHTML = conversation.messagesHtml || '';
-                    this.currentMessages = conversation.rawMessages || []; // <<< MODIFIED: Load rawMessages
-
+                    this.currentMessages = conversation.rawMessages || [];
                     if (this.messagesContainer.innerHTML.trim() === '' && this.currentMessages.length === 0) {
                         this.showWelcomeScreen();
                     }
@@ -694,39 +698,31 @@
                     this.showWelcomeScreen();
                     this.currentMessages = [];
                 }
-                
                 this.updateSidebarActiveState(id);
                 this.scrollToBottom();
-                
-                // Auto-close sidebar on mobile after selection
                 if (window.innerWidth < 1024) {
-                    const alpineData = Alpine.$data(document.body);
-                    alpineData.sidebarOpen = false;
+                    Alpine.$data(document.body).sidebarOpen = false;
                 }
             }
 
             saveCurrentConversation() {
                 if (!this.currentConversationId) return;
-                
                 const existingIndex = this.conversations.findIndex(c => c.id === this.currentConversationId);
                 const title = this.getConversationTitle();
                 const now = new Date().toISOString();
-                
                 const conversationData = {
                     id: this.currentConversationId,
                     title: title,
                     messagesHtml: this.messagesContainer.innerHTML,
-                    rawMessages: this.currentMessages, // <<< ADDED: Store structured messages
+                    rawMessages: this.currentMessages,
                     lastUpdated: now,
                     createdAt: (existingIndex >= 0 && this.conversations[existingIndex].createdAt) ? this.conversations[existingIndex].createdAt : now
                 };
-                
                 if (existingIndex >= 0) {
                     this.conversations[existingIndex] = conversationData;
                 } else {
                     this.conversations.push(conversationData);
                 }
-                
                 this.saveConversations();
                 this.updateSidebarTitle(this.currentConversationId, title);
             }
@@ -756,69 +752,44 @@
 
             deleteConversation(id, event) {
                 event.stopPropagation();
-                
-                this.showConfirmModal(
-                    'Delete Conversation',
-                    'Are you sure you want to delete this conversation? This action cannot be undone.',
-                    () => {
-                        this.conversations = this.conversations.filter(c => c.id !== id);
-                        this.saveConversations();
-                        
-                        // Remove from sidebar
-                        const item = this.chatHistory.querySelector(`[data-id="${id}"]`);
-                        if (item) {
-                            item.remove();
+                this.showConfirmModal('Delete Conversation', 'Are you sure you want to delete this conversation? This action cannot be undone.', () => {
+                    this.conversations = this.conversations.filter(c => c.id !== id);
+                    this.saveConversations();
+                    const item = this.chatHistory.querySelector(`[data-id="${id}"]`);
+                    if (item) item.remove();
+                    if (this.currentConversationId === id) {
+                        if (this.conversations.length > 0) {
+                            this.switchConversation(this.conversations[this.conversations.length - 1].id);
+                        } else {
+                            this.startNewConversation();
                         }
-                        
-                        // If this was the current conversation, switch to another or create new
-                        if (this.currentConversationId === id) {
-                            if (this.conversations.length > 0) {
-                                const lastConversation = this.conversations[this.conversations.length - 1];
-                                this.switchConversation(lastConversation.id);
-                            } else {
-                                this.startNewConversation();
-                            }
-                        }
-                        
-                        this.showNotification('Conversation deleted successfully', 'success');
                     }
-                );
+                    this.showNotification('Conversation deleted successfully', 'success');
+                });
             }
 
             clearAllConversations() {
-                this.showConfirmModal(
-                    'Clear All Conversations',
-                    'Are you sure you want to delete all conversations? This action cannot be undone.',
-                    () => {
-                        this.conversations = [];
-                        this.saveConversations();
-                        this.chatHistory.innerHTML = '';
-                        this.startNewConversation();
-                        this.showNotification('All conversations cleared successfully', 'success');
-                    }
-                );
+                this.showConfirmModal('Clear All Conversations', 'Are you sure you want to delete all conversations? This action cannot be undone.', () => {
+                    this.conversations = [];
+                    this.saveConversations();
+                    this.chatHistory.innerHTML = '';
+                    this.startNewConversation();
+                    this.showNotification('All conversations cleared successfully', 'success');
+                });
             }
 
             exportConversations() {
                 try {
-                    const exportData = {
-                        conversations: this.conversations,
-                        exportDate: new Date().toISOString(),
-                        version: '1.0',
-                        app: 'Brecker Search'
-                    };
-                    
+                    const exportData = { conversations: this.conversations, exportDate: new Date().toISOString(), version: '1.0', app: 'Brecker AI' }; // Updated app name
                     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
                     const url = URL.createObjectURL(blob);
-                    
                     const a = document.createElement('a');
                     a.href = url;
-                    a.download = `brecker-search-conversations-${new Date().toISOString().split('T')[0]}.json`;
+                    a.download = `brecker-ai-conversations-${new Date().toISOString().split('T')[0]}.json`; // Updated filename
                     document.body.appendChild(a);
                     a.click();
                     document.body.removeChild(a);
                     URL.revokeObjectURL(url);
-                    
                     this.showNotification('Conversations exported successfully', 'success');
                 } catch (error) {
                     console.error('Export error:', error);
@@ -829,21 +800,16 @@
             importConversations(event) {
                 const file = event.target.files[0];
                 if (!file) return;
-                
                 const reader = new FileReader();
                 reader.onload = (e) => {
                     try {
                         const importData = JSON.parse(e.target.result);
-                        
                         if (importData.conversations && Array.isArray(importData.conversations)) {
-                            // Merge with existing conversations, avoiding duplicates
                             const existingIds = new Set(this.conversations.map(c => c.id));
                             const newConversations = importData.conversations.filter(c => !existingIds.has(c.id));
-                            
                             this.conversations = [...this.conversations, ...newConversations];
                             this.saveConversations();
                             this.loadSidebar();
-                            
                             this.showNotification(`Imported ${newConversations.length} new conversations`, 'success');
                         } else {
                             throw new Error('Invalid file format');
@@ -854,129 +820,191 @@
                     }
                 };
                 reader.readAsText(file);
-                
-                // Reset file input
                 event.target.value = '';
             }
 
             showConfirmModal(title, message, onConfirm) {
                 const modal = document.getElementById('confirmModal');
-                const titleEl = document.getElementById('confirmTitle');
-                const messageEl = document.getElementById('confirmMessage');
-                const confirmBtn = document.getElementById('confirmButton');
-                
-                titleEl.textContent = title;
-                messageEl.textContent = message;
-                
-                confirmBtn.onclick = () => {
+                document.getElementById('confirmTitle').textContent = title;
+                document.getElementById('confirmMessage').textContent = message;
+                document.getElementById('confirmButton').onclick = () => {
                     onConfirm();
                     this.closeConfirmModal();
                 };
-                
                 modal.classList.remove('hidden');
             }
 
             closeConfirmModal() {
-                const modal = document.getElementById('confirmModal');
-                modal.classList.add('hidden');
+                document.getElementById('confirmModal').classList.add('hidden');
             }
 
             showNotification(message, type = 'info') {
-                // Create a simple notification
                 const notification = document.createElement('div');
                 notification.className = `fixed top-4 right-4 z-50 px-6 py-3 rounded-lg text-white text-sm transition-all duration-300 shadow-lg ${
                     type === 'success' ? 'bg-green-600' : 
                     type === 'error' ? 'bg-red-600' : 'bg-blue-600'
                 }`;
-                notification.innerHTML = `
-                    <div class="flex items-center space-x-2">
-                        <i class="fas ${type === 'success' ? 'fa-check-circle' : type === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle'}"></i>
-                        <span>${message}</span>
-                    </div>
-                `;
-                
+                notification.innerHTML = `<div class="flex items-center space-x-2"><i class="fas ${type === 'success' ? 'fa-check-circle' : type === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle'}"></i><span>${message}</span></div>`;
                 document.body.appendChild(notification);
-                
-                // Auto-remove after 3 seconds
                 setTimeout(() => {
                     notification.style.opacity = '0';
-                    setTimeout(() => {
-                        if (notification.parentNode) {
-                            notification.parentNode.removeChild(notification);
-                        }
-                    }, 300);
+                    setTimeout(() => { if (notification.parentNode) notification.parentNode.removeChild(notification); }, 300);
                 }, 3000);
             }
 
-            generateAIResponse(query, conversationHistory) {
-                const lowerQuery = query.toLowerCase().trim();
-                let response = "";
+            async _callAIModelForText(query, conversationHistory) {
+                await new Promise(resolve => setTimeout(resolve, 400));
+                const lowerQuery = query.toLowerCase();
+                if (lowerQuery.includes("tell me a joke")) {
+                    return { status: 'success', responseText: 'Why did the scarecrow win an award? Because he was outstanding in his field!', contentType: 'text/plain' };
+                } else if (lowerQuery.includes("explain quantum computing")) {
+                    return { status: 'success', responseText: 'Quantum computing uses qubits, which can be 0, 1, or both at the same time (superposition). This allows quantum computers to perform many calculations at once, making them super fast for specific problems, like drug discovery or breaking complex codes. It\'s like having many parallel paths instead of just one.', contentType: 'text/plain' };
+                } else {
+                    return { status: 'success', responseText: `Based on my advanced knowledge regarding '${query}', I can tell you it\'s a multifaceted topic. Could you perhaps narrow down what aspect you\'re interested in?`, contentType: 'text/plain' };
+                }
+            }
 
-                // 1. Check for memory-based follow-up first
-                const lastMessage = conversationHistory.length > 0 ? conversationHistory[conversationHistory.length - 1] : null;
+            async _callAIModelForCode(prompt, language = "plaintext") {
+                await new Promise(resolve => setTimeout(resolve, 600));
+                const lowerPrompt = prompt.toLowerCase();
+                if (lowerPrompt.includes("python") && lowerPrompt.includes("fibonacci")) {
+                    return { status: "success", code: "def fibonacci(n):\n  if n <= 1:\n    return n\n  else:\n    return fibonacci(n-1) + fibonacci(n-2)", language: "python", explanation: "This is a recursive Python function for Fibonacci." };
+                } else if (lowerPrompt.includes("javascript") && lowerPrompt.includes("hello world")) {
+                    return { status: "success", code: "console.log('Hello, World!');", language: "javascript", explanation: "This JavaScript code prints Hello, World! to the console." };
+                } else {
+                    return { status: "success", code: `// Your requested code for '${prompt}' would appear here.\n// For now, this is a placeholder.`, language: "plaintext", explanation: "This is a placeholder for your code request." };
+                }
+            }
+
+            async _callAIModelForImage(prompt) {
+                await new Promise(resolve => setTimeout(resolve, 400));
+                const lowerPrompt = prompt.toLowerCase();
+                if (lowerPrompt.includes("cat")) {
+                    return { status: "success", imageUrl: "https://placekitten.com/300/300", altText: prompt };
+                } else if (lowerPrompt.includes("dog")) {
+                    return { status: "success", imageUrl: `https://picsum.photos/seed/${encodeURIComponent(prompt)}/300/300`, altText: prompt };
+                } else {
+                    return { status: "success", imageUrl: `https://picsum.photos/seed/${encodeURIComponent(prompt)}/300/300`, altText: prompt };
+                }
+            }
+
+            async generateAIResponse(query, conversationHistory) {
+                const lowerQuery = query.toLowerCase().trim();
 
                 if (lowerQuery === "why?" || lowerQuery === "why" || lowerQuery === "elaborate" || lowerQuery === "can you elaborate?") {
+                    const lastMessage = conversationHistory.length > 0 ? conversationHistory[conversationHistory.length - 1] : null;
                     if (lastMessage && lastMessage.sender === 'ai' && lastMessage.text) {
-                        // Simple canned response for elaboration
-                        response = "I wish I could elaborate more! My current abilities are focused on finding information. Perhaps try asking in a different way or for specific details?";
-                        return response;
+                        return "I wish I could elaborate more! My current abilities are focused on finding information. Perhaps try asking in a different way or for specific details?";
+                    }
+                }
+                if (lowerQuery.includes("hello") || lowerQuery.includes("hi")) {
+                    return "Hello there! How can I assist you today? You can ask me to find information, images, or videos.";
+                } else if (lowerQuery.includes("how are you")) {
+                    return "I'm a set of code, so I don't have feelings, but I'm functioning optimally! What can I search for you?";
+                } else if (lowerQuery.includes("what can you do") || lowerQuery.includes("help me") || lowerQuery.includes("help")) {
+                    return "I'm Brecker, your AI assistant. I can search the web, find images, and look for videos based on your requests. I also try to be conversational! Ask me anything.";
+                } else if (lowerQuery.includes("what is your name") || lowerQuery.includes("who are you")) {
+                    return "I am Brecker AI, an assistant designed to help you find information.";
+                } else if (lowerQuery.includes("thank you") || lowerQuery.includes("thanks")) {
+                    return "You're welcome! Is there anything else I can help you with?";
+                }
+
+                const imageKeywords = ["generate image", "create image", "draw image", "show me a generated image of", "generate a picture of"];
+                for (const keyword of imageKeywords) {
+                    if (lowerQuery.startsWith(keyword)) {
+                        const imagePrompt = query.substring(keyword.length).trim();
+                        if (!imagePrompt) continue;
+                        try {
+                            const imageResult = await this._callAIModelForImage(imagePrompt);
+                            if (imageResult.status === 'success') {
+                                return `Okay, here's the image you requested:\nIMAGE_URL_MARKER:::${JSON.stringify({url: imageResult.imageUrl, alt: imageResult.altText})}`;
+                            } else {
+                                return "Sorry, I couldn't generate the image at this moment.";
+                            }
+                        } catch (error) {
+                            console.error("Error calling AI model for image:", error);
+                            return "Sorry, I couldn't generate the image at this moment.";
+                        }
                     }
                 }
 
-                // 2. Keyword-based responses
-                if (lowerQuery.includes("hello") || lowerQuery.includes("hi")) {
-                    response = "Hello there! How can I assist you today? You can ask me to find information, images, or videos.";
-                } else if (lowerQuery.includes("how are you")) {
-                    response = "I'm a set of code, so I don't have feelings, but I'm functioning optimally! What can I search for you?";
-                } else if (lowerQuery.includes("what can you do") || lowerQuery.includes("help me") || lowerQuery.includes("help")) {
-                    response = "I'm Brecker, your AI assistant. I can search the web, find images, and look for videos based on your requests. I also try to be conversational! Ask me anything.";
-                } else if (lowerQuery.includes("what is your name") || lowerQuery.includes("who are you")) {
-                    response = "I am Brecker AI, an assistant designed to help you find information.";
-                } else if (lowerQuery.includes("thank you") || lowerQuery.includes("thanks")) {
-                    response = "You're welcome! Is there anything else I can help you with?";
-                }
-                // Add more keyword rules as desired
-
-                // 3. If a specific response was generated, return it.
-                if (response) {
-                    return response;
+                if (lowerQuery.startsWith("write code") || lowerQuery.startsWith("generate code") || lowerQuery.includes("function for") || lowerQuery.includes("code for") || lowerQuery.includes("snippet for")) {
+                    try {
+                        const codeResult = await this._callAIModelForCode(query);
+                        if (codeResult.status === 'success') {
+                            return `Here's the code in ${codeResult.language}:\n\`\`\`${codeResult.language}\n${codeResult.code}\n\`\`\`\n${codeResult.explanation}`;
+                        } else {
+                            return "My apologies, I couldn't generate the code at this moment.";
+                        }
+                    } catch (error) {
+                        console.error("Error calling AI model for code:", error);
+                        return "My apologies, I couldn't generate the code at this moment.";
+                    }
                 }
 
-                // 4. Default response (leading to a search action)
-                // This response indicates the AI will now use its search capabilities for the query.
+                const textGenKeywords = ["explain", "what is", "tell me about", "joke"];
+                if (textGenKeywords.some(keyword => lowerQuery.includes(keyword)) || query.length > 20) {
+                    try {
+                        const textResult = await this._callAIModelForText(query, conversationHistory);
+                        if (textResult.status === 'success') {
+                            return textResult.responseText;
+                        } else {
+                            return "I tried to process that, but ran into a hiccup.";
+                        }
+                    } catch (error) {
+                        console.error("Error calling AI model for text:", error);
+                        return "I tried to process that, but ran into a hiccup.";
+                    }
+                }
                 return "Let me check that for you: '" + query + "'. I'll search for information, and if you want images or videos, please specify that in your query.";
             }
 
             async handleSubmit(e) {
                 e.preventDefault();
                 const query = this.searchInput.value.trim();
-                
                 if (!query) return;
-                
+
                 this.addUserMessage(query);
                 this.searchInput.value = '';
                 this.searchInput.style.height = 'auto';
                 this.setLoading(true);
 
-                // 1. Generate and display AI's textual response
-                const aiTextResponse = this.generateAIResponse(query, this.currentMessages);
-                this.addAIMessageToHistory(aiTextResponse);
-                this.addAIMessage(this.escapeHtml(aiTextResponse));
+                const currentAIModeActive = Alpine.$data(document.body).aiModeActive;
 
-                // 2. Check if the AI's response implies a search should be performed
-                if (aiTextResponse.startsWith("Let me check that for you:")) {
-                    this.addTypingIndicator();
+                if (currentAIModeActive) {
+                    const aiTextResponse = await this.generateAIResponse(query, this.currentMessages);
+                    this.addAIMessageToHistory(aiTextResponse);
+                    this.addAIMessage(aiTextResponse);
+
+                    if (aiTextResponse.startsWith("Let me check that for you:")) {
+                        this.addTypingIndicator('ai');
+                        try {
+                            const resultsHtml = await this.executeSearchAndGetResultsHTML(query);
+                            this.removeTypingIndicator();
+                            if (resultsHtml) {
+                                this.addAIMessage(resultsHtml);
+                            }
+                        } catch (error) {
+                            this.removeTypingIndicator();
+                            const errorMessage = 'I encountered an error while searching. Please try again.';
+                            this.addAIMessageToHistory('Error: ' + errorMessage);
+                            this.addAIMessage(errorMessage, 'error');
+                        }
+                    }
+                } else { // Simple Search Mode
+                    this.addTypingIndicator('search');
                     try {
-                        // 3. Execute the actual search and get HTML results
                         const resultsHtml = await this.executeSearchAndGetResultsHTML(query);
                         this.removeTypingIndicator();
                         if (resultsHtml) {
-                            this.addAIMessage(resultsHtml);
+                             this.addAIMessage(resultsHtml); // This already adds the full HTML structure
+                        } else {
+                            this.addAIMessage("No search results found.", "normal");
                         }
                     } catch (error) {
                         this.removeTypingIndicator();
-                        const errorMessage = 'I encountered an error while searching. Please try again.';
-                        this.addAIMessageToHistory('Error: ' + errorMessage);
+                        const errorMessage = 'I encountered an error during simple search. Please try again.';
+                        this.addAIMessageToHistory('Error: ' + errorMessage); // Log generic error
                         this.addAIMessage(errorMessage, 'error');
                     }
                 }
@@ -989,12 +1017,11 @@
                 this.currentMessages.push({ sender: 'ai', text: messageContent, timestamp: new Date() });
             }
 
-            addUserMessage(message, addToHistory = true) { // <<< MODIFIED SIGNATURE
-                if (addToHistory) { // <<< ADDED CONDITION
+            addUserMessage(message, addToHistory = true) {
+                if (addToHistory) {
                     this.currentMessages.push({ sender: 'user', text: message, timestamp: new Date() });
                 }
 
-                // Clear welcome screen if it exists
                 const welcomeScreen = this.messagesContainer.querySelector('.py-16');
                 if (welcomeScreen) {
                     this.messagesContainer.innerHTML = '';
@@ -1021,39 +1048,92 @@
             addAIMessage(content, type = 'normal') {
                 const messageDiv = document.createElement('div');
                 messageDiv.className = 'py-6 md:py-8 border-b border-black/10 dark:border-gray-700 bg-gray-50 dark:bg-chatgpt-dark-user-bg message-enter';
-                
                 const textColor = type === 'error' ? 'text-red-500 dark:text-red-400' : 'text-gray-800 dark:text-gray-100';
+                let finalHtmlContent = '';
+                const imageMarker = "IMAGE_URL_MARKER:::";
+
+                if (type === 'normal') {
+                    let textPart = content;
+                    let imageHtml = '';
+
+                    if (content.includes(imageMarker)) {
+                        const parts = content.split(imageMarker);
+                        textPart = parts[0];
+                        if (parts[1]) {
+                            try {
+                                const imageData = JSON.parse(parts[1]);
+                                imageHtml = `<img src="${this.escapeHtml(imageData.url)}" alt="${this.escapeHtml(imageData.alt)}" class="generated-ai-image w-full max-w-sm rounded-lg my-2 mx-auto block">`;
+                                if (parts.length > 2) {
+                                     textPart += parts.slice(2).join(imageMarker);
+                                }
+                            } catch (e) {
+                                console.error("Error parsing image data:", e);
+                            }
+                        }
+                    }
+
+                    if (textPart.includes('```')) {
+                        let processedText = '';
+                        let lastIndex = 0;
+                        const codeBlockRegex = /```(\w*)\n([\s\S]*?)\n```/g;
+                        let match;
+                        while ((match = codeBlockRegex.exec(textPart)) !== null) {
+                            processedText += this.escapeHtml(textPart.substring(lastIndex, match.index));
+                            const lang = match[1] || 'plaintext';
+                            const code = this.escapeHtml(match[2].trim());
+                            processedText += `<pre><code class="language-${lang}">${code}</code></pre>`;
+                            lastIndex = codeBlockRegex.lastIndex;
+                        }
+                        processedText += this.escapeHtml(textPart.substring(lastIndex));
+                        finalHtmlContent = processedText + imageHtml;
+                    } else {
+                        finalHtmlContent = this.escapeHtml(textPart) + imageHtml;
+                    }
+                } else if (type === 'error') {
+                    finalHtmlContent = this.escapeHtml(content);
+                } else { // Assumed to be pre-formatted HTML for search results
+                    finalHtmlContent = content;
+                }
                 
                 messageDiv.innerHTML = `
                     <div class="max-w-4xl mx-auto flex">
                         <div class="w-[30px] flex flex-col relative items-end mr-4 md:mr-6">
                             <div class="w-8 h-8 rounded-lg flex items-center justify-center bg-chatgpt-green">
-                                <i class="fas fa-search text-white text-sm"></i>
+                                <i class="fas fa-brain text-white text-sm"></i>
                             </div>
                         </div>
-                        <div class="flex-1 ${textColor} overflow-x-auto">
-                            ${content}
+                        <div class="flex-1 ${textColor} overflow-x-auto brecker-ai-message-content">
+                            ${finalHtmlContent}
                         </div>
                     </div>
                 `;
                 this.messagesContainer.appendChild(messageDiv);
+                if (typeof hljs !== 'undefined') {
+                    messageDiv.querySelectorAll('pre code').forEach((block) => {
+                        hljs.highlightElement(block);
+                    });
+                }
                 this.scrollToBottom();
             }
 
-            addTypingIndicator() {
+            addTypingIndicator(mode = 'ai') {
                 const typingDiv = document.createElement('div');
                 typingDiv.id = 'typingIndicator';
                 typingDiv.className = 'py-6 md:py-8 border-b border-black/10 dark:border-gray-700 bg-gray-50 dark:bg-chatgpt-dark-user-bg message-enter';
+
+                const iconClass = mode === 'search' ? 'fa-search' : 'fa-brain';
+                const thinkingText = mode === 'search' ? 'Brecker is searching...' : 'Brecker AI is thinking...';
+
                 typingDiv.innerHTML = `
                     <div class="max-w-4xl mx-auto flex">
                         <div class="w-[30px] flex flex-col relative items-end mr-4 md:mr-6">
                             <div class="w-8 h-8 rounded-lg flex items-center justify-center bg-chatgpt-green">
-                                <i class="fas fa-search text-white text-sm"></i>
+                                <i class="fas ${iconClass} text-white text-sm"></i>
                             </div>
                         </div>
                         <div class="flex-1 text-gray-800 dark:text-gray-100">
                             <div class="flex items-center space-x-2">
-                                <span class="text-sm text-gray-600 dark:text-gray-400">Brecker is searching</span>
+                                <span class="text-sm text-gray-600 dark:text-gray-400">${thinkingText}</span>
                                 <div class="flex space-x-1">
                                     <div class="typing-indicator"></div>
                                     <div class="typing-indicator"></div>
@@ -1074,17 +1154,10 @@
                 }
             }
 
-            // Renamed and refactored from performAISearch
             async executeSearchAndGetResultsHTML(query) {
-                // This method no longer calls addTypingIndicator or removeTypingIndicator.
-                // It focuses on fetching and formatting search results into an HTML string.
                 try {
-                    // Determine search type based on query
                     const searchType = this.determineSearchType(query);
-                    
                     let results = [];
-                    
-                    // Perform different types of searches
                     if (searchType.includes('image')) {
                         results = await this.searchImages(query);
                     } else if (searchType.includes('video')) {
@@ -1092,12 +1165,9 @@
                     } else {
                         results = await this.searchWeb(query);
                     }
-                    
-                    // The displayAIResults method already returns an HTML string
                     return this.displayAIResults(results, query, searchType);
                 } catch (error) {
                     console.error('Search execution error:', error);
-                    // Let the error propagate to handleSubmit to be handled there.
                     throw error;
                 }
             }
@@ -1105,27 +1175,23 @@
             determineSearchType(query) {
                 const lowerQuery = query.toLowerCase();
                 const types = [];
-                
-                if (lowerQuery.includes('image') || lowerQuery.includes('photo') || lowerQuery.includes('picture') || lowerQuery.includes('show me')) {
+                if (lowerQuery.includes('image') || lowerQuery.includes('photo') || lowerQuery.includes('picture')) { // Removed "show me" for search type
                     types.push('image');
                 }
-                if (lowerQuery.includes('video') || lowerQuery.includes('tutorial') || lowerQuery.includes('watch') || lowerQuery.includes('find videos')) {
+                if (lowerQuery.includes('video') || lowerQuery.includes('tutorial') || lowerQuery.includes('watch')) { // Removed "find videos"
                     types.push('video');
                 }
                 if (types.length === 0) {
                     types.push('web');
                 }
-                
                 return types;
             }
 
             async searchWeb(query) {
                 try {
-                    // Try Wikipedia first for factual information
                     const wikiResponse = await fetch(
                         `https://en.wikipedia.org/w/api.php?action=query&format=json&list=search&srsearch=${encodeURIComponent(query)}&origin=*&srlimit=3`
                     );
-                    
                     if (wikiResponse.ok) {
                         const wikiData = await wikiResponse.json();
                         const wikiResults = wikiData.query.search.map(item => ({
@@ -1135,8 +1201,6 @@
                             url: `https://en.wikipedia.org/wiki/${encodeURIComponent(item.title)}`,
                             source: 'Wikipedia'
                         }));
-
-                        // Try to get additional summary for the first result
                         if (wikiResults.length > 0) {
                             try {
                                 const summaryResponse = await fetch(
@@ -1149,331 +1213,112 @@
                                         wikiResults[0].thumbnail = summaryData.thumbnail.source;
                                     }
                                 }
-                            } catch (e) {
-                                // Ignore summary errors
-                            }
+                            } catch (e) { /* Ignore */ }
                         }
-
                         return wikiResults;
                     }
-                } catch (error) {
-                    console.error('Wikipedia search error:', error);
-                }
-
-                // Fallback to DuckDuckGo Instant Answer API
+                } catch (error) { console.error('Wikipedia search error:', error); }
                 try {
                     const ddgResponse = await fetch(
                         `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`
                     );
-                    
                     if (ddgResponse.ok) {
                         const ddgData = await ddgResponse.json();
                         const results = [];
-                        
                         if (ddgData.Abstract) {
-                            results.push({
-                                type: 'web',
-                                title: ddgData.Heading || query,
-                                snippet: ddgData.Abstract,
-                                url: ddgData.AbstractURL || '#',
-                                source: ddgData.AbstractSource || 'DuckDuckGo'
-                            });
+                            results.push({ type: 'web', title: ddgData.Heading || query, snippet: ddgData.Abstract, url: ddgData.AbstractURL || '#', source: ddgData.AbstractSource || 'DuckDuckGo' });
                         }
-                        
                         if (ddgData.RelatedTopics && ddgData.RelatedTopics.length > 0) {
                             ddgData.RelatedTopics.slice(0, 2).forEach(topic => {
                                 if (topic.Text && topic.FirstURL) {
-                                    results.push({
-                                        type: 'web',
-                                        title: topic.Text.split(' - ')[0],
-                                        snippet: topic.Text,
-                                        url: topic.FirstURL,
-                                        source: 'DuckDuckGo'
-                                    });
+                                    results.push({ type: 'web', title: topic.Text.split(' - ')[0], snippet: topic.Text, url: topic.FirstURL, source: 'DuckDuckGo' });
                                 }
                             });
                         }
-                        
-                        if (results.length > 0) {
-                            return results;
-                        }
+                        if (results.length > 0) return results;
                     }
-                } catch (error) {
-                    console.error('DuckDuckGo search error:', error);
-                }
-
-                // Final fallback - return informative message
-                return [{
-                    type: 'web',
-                    title: `Search results for "${query}"`,
-                    snippet: `I searched for information about "${query}" but couldn't retrieve specific results at the moment. This could be due to API limitations or network issues. Try rephrasing your search or searching for more specific terms.`,
-                    url: `https://www.google.com/search?q=${encodeURIComponent(query)}`,
-                    source: 'Search Suggestion'
-                }];
+                } catch (error) { console.error('DuckDuckGo search error:', error); }
+                return [{ type: 'web', title: `Search results for "${query}"`, snippet: `I searched for information about "${query}" but couldn't retrieve specific results at the moment. This could be due to API limitations or network issues. Try rephrasing your search or searching for more specific terms.`, url: `https://www.google.com/search?q=${encodeURIComponent(query)}`, source: 'Search Suggestion' }];
             }
 
             async searchImages(query) {
                 try {
-                    // Use Unsplash API for high-quality images
                     const unsplashResponse = await fetch(
-                        `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=6&client_id=demo`
+                        `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=6&client_id=YOUR_UNSPLASH_ACCESS_KEY` // Replace with actual Unsplash Key if available
                     );
-                    
                     if (unsplashResponse.ok) {
                         const unsplashData = await unsplashResponse.json();
-                        return unsplashData.results.map(photo => ({
-                            type: 'image',
-                            title: photo.alt_description || photo.description || `${query} image`,
-                            url: photo.urls.regular,
-                            thumbnail: photo.urls.small,
-                            source: `Unsplash - ${photo.user.name}`,
-                            attribution: photo.user.links.html
-                        }));
+                        return unsplashData.results.map(photo => ({ type: 'image', title: photo.alt_description || photo.description || `${query} image`, url: photo.urls.regular, thumbnail: photo.urls.small, source: `Unsplash - ${photo.user.name}`, attribution: photo.user.links.html }));
                     }
-                } catch (error) {
-                    console.error('Unsplash search error:', error);
-                }
-
-                // Fallback to Lorem Picsum with relevant categories
+                } catch (error) { console.error('Unsplash search error:', error); }
                 const categories = this.getImageCategories(query);
-                return categories.map((category, index) => ({
-                    type: 'image',
-                    title: `${query} - ${category}`,
-                    url: `https://picsum.photos/600/400?random=${Date.now() + index}&blur=0`,
-                    thumbnail: `https://picsum.photos/150/150?random=${Date.now() + index}&blur=0`,
-                    source: 'Lorem Picsum'
-                }));
+                return categories.map((category, index) => ({ type: 'image', title: `${query} - ${category}`, url: `https://picsum.photos/seed/${encodeURIComponent(query)+index}/600/400`, thumbnail: `https://picsum.photos/seed/${encodeURIComponent(query)+index}/150/150`, source: 'Lorem Picsum' }));
             }
 
             getImageCategories(query) {
                 const lowerQuery = query.toLowerCase();
-                
-                if (lowerQuery.includes('space') || lowerQuery.includes('telescope') || lowerQuery.includes('nasa')) {
-                    return ['Space Observatory', 'Galaxy View', 'Nebula Formation', 'Star Field', 'Cosmic Structure', 'Deep Space'];
-                }
-                if (lowerQuery.includes('nature') || lowerQuery.includes('landscape')) {
-                    return ['Mountain Landscape', 'Forest View', 'Ocean Scene', 'Desert Vista', 'River Valley', 'Wildlife'];
-                }
-                if (lowerQuery.includes('technology') || lowerQuery.includes('computer')) {
-                    return ['Modern Technology', 'Digital Interface', 'Circuit Board', 'Data Center', 'Innovation Lab', 'Tech Setup'];
-                }
-                if (lowerQuery.includes('city') || lowerQuery.includes('urban')) {
-                    return ['City Skyline', 'Urban Architecture', 'Street View', 'Modern Buildings', 'City Lights', 'Metropolitan'];
-                }
-                
+                if (lowerQuery.includes('space') || lowerQuery.includes('telescope') || lowerQuery.includes('nasa')) return ['Space Observatory', 'Galaxy View', 'Nebula Formation', 'Star Field', 'Cosmic Structure', 'Deep Space'];
+                if (lowerQuery.includes('nature') || lowerQuery.includes('landscape')) return ['Mountain Landscape', 'Forest View', 'Ocean Scene', 'Desert Vista', 'River Valley', 'Wildlife'];
+                if (lowerQuery.includes('technology') || lowerQuery.includes('computer')) return ['Modern Technology', 'Digital Interface', 'Circuit Board', 'Data Center', 'Innovation Lab', 'Tech Setup'];
+                if (lowerQuery.includes('city') || lowerQuery.includes('urban')) return ['City Skyline', 'Urban Architecture', 'Street View', 'Modern Buildings', 'City Lights', 'Metropolitan'];
                 return ['Related Image 1', 'Related Image 2', 'Related Image 3', 'Related Image 4', 'Related Image 5', 'Related Image 6'];
             }
 
             async searchVideos(query) {
-                // Note: YouTube API requires authentication, so we'll simulate realistic results
-                // In a real implementation, you would use the YouTube Data API v3
-                
                 const videoTopics = this.getVideoTopics(query);
-                
-                return videoTopics.map((topic, index) => ({
-                    type: 'video',
-                    title: topic.title,
-                    thumbnail: `https://picsum.photos/320/180?random=video${Date.now() + index}`,
-                    duration: topic.duration,
-                    views: topic.views,
-                    url: `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`,
-                    source: 'YouTube',
-                    description: topic.description
-                }));
+                return videoTopics.map((topic, index) => ({ type: 'video', title: topic.title, thumbnail: `https://picsum.photos/seed/video${Date.now() + index}/320/180`, duration: topic.duration, views: topic.views, url: `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`, source: 'YouTube', description: topic.description }));
             }
 
             getVideoTopics(query) {
                 const lowerQuery = query.toLowerCase();
-                
-                if (lowerQuery.includes('machine learning') || lowerQuery.includes('ai')) {
-                    return [
-                        {
-                            title: `Machine Learning Explained - Complete Guide`,
-                            duration: '18:45',
-                            views: '2.1M views',
-                            description: 'Comprehensive introduction to machine learning concepts and applications'
-                        },
-                        {
-                            title: `AI in 2024: Latest Developments and Trends`,
-                            duration: '25:30',
-                            views: '1.8M views',
-                            description: 'Overview of recent advances in artificial intelligence technology'
-                        }
-                    ];
-                }
-                
-                if (lowerQuery.includes('quantum')) {
-                    return [
-                        {
-                            title: `Quantum Computing Explained Simply`,
-                            duration: '22:15',
-                            views: '3.2M views',
-                            description: 'Easy-to-understand explanation of quantum computing principles'
-                        },
-                        {
-                            title: `The Future of Quantum Technology`,
-                            duration: '16:40',
-                            views: '1.5M views',
-                            description: 'Exploring the potential applications of quantum computing'
-                        }
-                    ];
-                }
-                
-                if (lowerQuery.includes('programming') || lowerQuery.includes('coding')) {
-                    return [
-                        {
-                            title: `${query} - Complete Tutorial for Beginners`,
-                            duration: '45:20',
-                            views: '1.9M views',
-                            description: 'Step-by-step tutorial covering all the basics'
-                        },
-                        {
-                            title: `Advanced ${query} Techniques and Best Practices`,
-                            duration: '32:15',
-                            views: '856K views',
-                            description: 'Professional tips and advanced concepts'
-                        }
-                    ];
-                }
-                
-                // Generic video results
-                return [
-                    {
-                        title: `${query} - Complete Guide and Tutorial`,
-                        duration: '28:45',
-                        views: '1.2M views',
-                        description: `Comprehensive guide covering everything about ${query}`
-                    },
-                    {
-                        title: `Understanding ${query}: Expert Explanation`,
-                        duration: '19:30',
-                        views: '890K views',
-                        description: `Expert breakdown and analysis of ${query}`
-                    }
-                ];
+                if (lowerQuery.includes('machine learning') || lowerQuery.includes('ai')) return [{ title: `Machine Learning Explained - Complete Guide`, duration: '18:45', views: '2.1M views', description: 'Comprehensive introduction to machine learning concepts and applications' }, { title: `AI in 2024: Latest Developments and Trends`, duration: '25:30', views: '1.8M views', description: 'Overview of recent advances in artificial intelligence technology' }];
+                if (lowerQuery.includes('quantum')) return [{ title: `Quantum Computing Explained Simply`, duration: '22:15', views: '3.2M views', description: 'Easy-to-understand explanation of quantum computing principles' }, { title: `The Future of Quantum Technology`, duration: '16:40', views: '1.5M views', description: 'Exploring the potential applications of quantum computing' }];
+                if (lowerQuery.includes('programming') || lowerQuery.includes('coding')) return [{ title: `${query} - Complete Tutorial for Beginners`, duration: '45:20', views: '1.9M views', description: 'Step-by-step tutorial covering all the basics' }, { title: `Advanced ${query} Techniques and Best Practices`, duration: '32:15', views: '856K views', description: 'Professional tips and advanced concepts' }];
+                return [{ title: `${query} - Complete Guide and Tutorial`, duration: '28:45', views: '1.2M views', description: `Comprehensive guide covering everything about ${query}` }, { title: `Understanding ${query}: Expert Explanation`, duration: '19:30', views: '890K views', description: `Expert breakdown and analysis of ${query}` }];
             }
 
             displayAIResults(results, query, searchType) {
                 let content = `<div class="space-y-6">`;
-                
                 if (results.length === 0) {
                     content += `<p class="text-gray-600 dark:text-gray-400">I couldn't find any results for "${query}". Please try a different search term or check your spelling.</p>`;
                 } else {
-                    content += `<div class="mb-6">
-                        <h3 class="text-xl font-semibold text-gray-800 dark:text-gray-200 mb-2">Search Results for "${this.escapeHtml(query)}"</h3>
-                        <p class="text-gray-600 dark:text-gray-400">Found ${results.length} result${results.length > 1 ? 's' : ''} â€¢ Search type: ${searchType.join(', ')}</p>
-                    </div>`;
-
-                    if (searchType.includes('image')) {
-                        content += this.renderImageResults(results);
-                    } else if (searchType.includes('video')) {
-                        content += this.renderVideoResults(results);
-                    } else {
-                        content += this.renderWebResults(results);
-                    }
-
-                    content += `<div class="mt-8 p-6 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-gray-800 dark:to-gray-700 rounded-xl border border-gray-200 dark:border-gray-600">
-                        <div class="flex items-start space-x-3">
-                            <i class="fas fa-info-circle text-blue-500 mt-1"></i>
-                            <div>
-                                <h4 class="font-semibold text-gray-800 dark:text-gray-200 mb-2">About these results</h4>
-                                <p class="text-sm text-gray-600 dark:text-gray-400">
-                                    Results are sourced from various APIs and databases including Wikipedia, Unsplash, and other reliable sources. 
-                                    For the most current information, consider checking the original sources directly.
-                                </p>
-                            </div>
-                        </div>
-                    </div>`;
+                    content += `<div class="mb-6"><h3 class="text-xl font-semibold text-gray-800 dark:text-gray-200 mb-2">Search Results for "${this.escapeHtml(query)}"</h3><p class="text-gray-600 dark:text-gray-400">Found ${results.length} result${results.length > 1 ? 's' : ''} â€¢ Search type: ${searchType.join(', ')}</p></div>`;
+                    if (searchType.includes('image')) content += this.renderImageResults(results);
+                    else if (searchType.includes('video')) content += this.renderVideoResults(results);
+                    else content += this.renderWebResults(results);
+                    content += `<div class="mt-8 p-6 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-gray-800 dark:to-gray-700 rounded-xl border border-gray-200 dark:border-gray-600"><div class="flex items-start space-x-3"><i class="fas fa-info-circle text-blue-500 mt-1"></i><div><h4 class="font-semibold text-gray-800 dark:text-gray-200 mb-2">About these results</h4><p class="text-sm text-gray-600 dark:text-gray-400">Results are sourced from various APIs and databases including Wikipedia, Unsplash, and other reliable sources. For the most current information, consider checking the original sources directly.</p></div></div></div>`;
                 }
-
                 content += `</div>`;
-                
-                this.addAIMessage(content);
-                return content; // Return the HTML content that was added for history
+                // this.addAIMessage(content); // This was causing duplicate display of search results
+                return content;
             }
 
             renderWebResults(results) {
                 let html = '<div class="space-y-4">';
                 results.forEach((result, index) => {
-                    html += `
-                        <div class="border border-gray-200 dark:border-gray-700 rounded-xl p-6 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all duration-200 hover:shadow-md">
-                            ${result.thumbnail ? `
-                                <div class="flex gap-4">
-                                    <img src="${result.thumbnail}" alt="${result.title}" class="w-20 h-20 object-cover rounded-lg flex-shrink-0">
-                                    <div class="flex-1">
-                            ` : '<div>'}
-                                        <h3 class="font-semibold text-lg text-blue-600 dark:text-blue-400 mb-2 hover:underline">
-                                            <a href="${result.url}" target="_blank" rel="noopener noreferrer">${this.escapeHtml(result.title)}</a>
-                                        </h3>
-                                        <p class="text-gray-600 dark:text-gray-300 mb-3 leading-relaxed">${this.escapeHtml(result.snippet)}</p>
-                                        <div class="flex items-center text-sm text-gray-500 dark:text-gray-400">
-                                            <i class="fas fa-external-link-alt mr-2"></i>
-                                            <span>${this.escapeHtml(result.source)}</span>
-                                        </div>
-                            ${result.thumbnail ? `
-                                    </div>
-                                </div>
-                            ` : '</div>'}
-                        </div>
-                    `;
+                    html += `<div class="border border-gray-200 dark:border-gray-700 rounded-xl p-6 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all duration-200 hover:shadow-md">${result.thumbnail ? `<div class="flex gap-4"><img src="${result.thumbnail}" alt="${result.title}" class="w-20 h-20 object-cover rounded-lg flex-shrink-0"><div class="flex-1">` : '<div>'}<h3 class="font-semibold text-lg text-blue-600 dark:text-blue-400 mb-2 hover:underline"><a href="${result.url}" target="_blank" rel="noopener noreferrer">${this.escapeHtml(result.title)}</a></h3><p class="text-gray-600 dark:text-gray-300 mb-3 leading-relaxed">${this.escapeHtml(result.snippet)}</p><div class="flex items-center text-sm text-gray-500 dark:text-gray-400"><i class="fas fa-external-link-alt mr-2"></i><span>${this.escapeHtml(result.source)}</span></div>${result.thumbnail ? `</div></div>` : '</div>'}</div>`;
                 });
                 html += '</div>';
                 return html;
             }
 
             renderImageResults(results) {
-                let html = '<div class="mb-6">';
-                html += '<h4 class="text-lg font-semibold mb-4 text-gray-800 dark:text-gray-200 flex items-center"><i class="fas fa-images mr-3 text-blue-500"></i>Image Results</h4>';
-                html += '<div class="image-grid">';
+                let html = '<div class="mb-6"><h4 class="text-lg font-semibold mb-4 text-gray-800 dark:text-gray-200 flex items-center"><i class="fas fa-images mr-3 text-blue-500"></i>Image Results</h4><div class="image-grid">';
                 results.forEach((result, index) => {
-                    html += `
-                        <div class="image-item" onclick="openImageModal('${result.url}', '${this.escapeHtml(result.title)}')">
-                            <img src="${result.thumbnail}" alt="${this.escapeHtml(result.title)}" class="w-full h-full object-cover" loading="lazy">
-                            <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent text-white text-xs p-3 opacity-0 hover:opacity-100 transition-opacity">
-                                <div class="font-medium truncate">${this.escapeHtml(result.title)}</div>
-                                <div class="text-gray-300 text-xs mt-1">${this.escapeHtml(result.source)}</div>
-                            </div>
-                        </div>
-                    `;
+                    html += `<div class="image-item" onclick="openImageModal('${result.url}', '${this.escapeHtml(result.title)}')"><img src="${result.thumbnail}" alt="${this.escapeHtml(result.title)}" class="w-full h-full object-cover" loading="lazy"><div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent text-white text-xs p-3 opacity-0 hover:opacity-100 transition-opacity"><div class="font-medium truncate">${this.escapeHtml(result.title)}</div><div class="text-gray-300 text-xs mt-1">${this.escapeHtml(result.source)}</div></div></div>`;
                 });
                 html += '</div>';
-                
                 if (results[0] && results[0].attribution) {
-                    html += `<p class="text-sm text-gray-500 dark:text-gray-400 mt-4 flex items-center">
-                        <i class="fas fa-camera mr-2"></i>
-                        Images provided by Unsplash photographers
-                    </p>`;
+                    html += `<p class="text-sm text-gray-500 dark:text-gray-400 mt-4 flex items-center"><i class="fas fa-camera mr-2"></i>Images provided by Unsplash photographers</p>`;
                 }
-                
                 html += '</div>';
                 return html;
             }
 
             renderVideoResults(results) {
-                let html = '<div class="mb-6">';
-                html += '<h4 class="text-lg font-semibold mb-4 text-gray-800 dark:text-gray-200 flex items-center"><i class="fas fa-video mr-3 text-red-500"></i>Video Results</h4>';
-                html += '<div class="space-y-4">';
+                let html = '<div class="mb-6"><h4 class="text-lg font-semibold mb-4 text-gray-800 dark:text-gray-200 flex items-center"><i class="fas fa-video mr-3 text-red-500"></i>Video Results</h4><div class="space-y-4">';
                 results.forEach((result, index) => {
-                    html += `
-                        <div class="border border-gray-200 dark:border-gray-700 rounded-xl p-6 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all duration-200 hover:shadow-md">
-                            <div class="flex flex-col sm:flex-row gap-4">
-                                <div class="video-thumbnail flex-shrink-0 relative">
-                                    <img src="${result.thumbnail}" alt="${this.escapeHtml(result.title)}" class="w-full sm:w-56 h-32 object-cover rounded-lg">
-                                </div>
-                                <div class="flex-1">
-                                    <h3 class="font-semibold text-lg text-blue-600 dark:text-blue-400 mb-2 hover:underline">
-                                        <a href="${result.url}" target="_blank" rel="noopener noreferrer">${this.escapeHtml(result.title)}</a>
-                                    </h3>
-                                    <p class="text-gray-600 dark:text-gray-300 mb-3 leading-relaxed">${this.escapeHtml(result.description)}</p>
-                                    <div class="flex items-center space-x-4 text-sm text-gray-500 dark:text-gray-400">
-                                        <span><i class="fas fa-clock mr-1"></i>${result.duration}</span>
-                                        <span><i class="fas fa-eye mr-1"></i>${result.views}</span>
-                                        <span><i class="fas fa-external-link-alt mr-1"></i>${result.source}</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    `;
+                    html += `<div class="border border-gray-200 dark:border-gray-700 rounded-xl p-6 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all duration-200 hover:shadow-md"><div class="flex flex-col sm:flex-row gap-4"><div class="video-thumbnail flex-shrink-0 relative"><img src="${result.thumbnail}" alt="${this.escapeHtml(result.title)}" class="w-full sm:w-56 h-32 object-cover rounded-lg"></div><div class="flex-1"><h3 class="font-semibold text-lg text-blue-600 dark:text-blue-400 mb-2 hover:underline"><a href="${result.url}" target="_blank" rel="noopener noreferrer">${this.escapeHtml(result.title)}</a></h3><p class="text-gray-600 dark:text-gray-300 mb-3 leading-relaxed">${this.escapeHtml(result.description)}</p><div class="flex items-center space-x-4 text-sm text-gray-500 dark:text-gray-400"><span><i class="fas fa-clock mr-1"></i>${result.duration}</span><span><i class="fas fa-eye mr-1"></i>${result.views}</span><span><i class="fas fa-external-link-alt mr-1"></i>${result.source}</span></div></div></div></div>`;
                 });
                 html += '</div></div>';
                 return html;
@@ -1482,7 +1327,6 @@
             setLoading(loading) {
                 this.sendButton.disabled = loading;
                 this.searchInput.disabled = loading;
-                
                 if (loading) {
                     this.sendButton.innerHTML = `<i class="fas fa-spinner fa-spin"></i>`;
                 } else {
@@ -1491,9 +1335,7 @@
             }
 
             scrollToBottom() {
-                setTimeout(() => {
-                    this.chatContainer.scrollTop = this.chatContainer.scrollHeight;
-                }, 100);
+                setTimeout(() => { this.chatContainer.scrollTop = this.chatContainer.scrollHeight; }, 100);
             }
 
             escapeHtml(text) {
@@ -1508,59 +1350,32 @@
             const searchInput = document.getElementById('searchInput');
             searchInput.value = query;
             searchInput.focus();
-            
-            // Trigger form submission
             const event = new Event('submit', { cancelable: true });
             document.getElementById('searchForm').dispatchEvent(event);
         }
 
         function openImageModal(url, title) {
-            const modal = document.getElementById('imageModal');
-            const modalImage = document.getElementById('modalImage');
-            modalImage.src = url;
-            modalImage.alt = title;
-            modal.classList.remove('hidden');
+            document.getElementById('modalImage').src = url;
+            document.getElementById('modalImage').alt = title;
+            document.getElementById('imageModal').classList.remove('hidden');
         }
 
         function closeImageModal() {
-            const modal = document.getElementById('imageModal');
-            modal.classList.add('hidden');
+            document.getElementById('imageModal').classList.add('hidden');
         }
 
-        function startNewChat() {
-            window.searchEngine.startNewConversation();
-        }
+        function startNewChat() { window.searchEngine.startNewConversation(); }
+        function switchToConversation(id) { window.searchEngine.switchConversation(id); }
+        function deleteConversation(id, event) { window.searchEngine.deleteConversation(id, event); }
+        function clearAllConversations() { window.searchEngine.clearAllConversations(); }
+        function exportConversations() { window.searchEngine.exportConversations(); }
+        function importConversations(event) { window.searchEngine.importConversations(event); }
+        function closeConfirmModal() { window.searchEngine.closeConfirmModal(); }
 
-        function switchToConversation(id) {
-            window.searchEngine.switchConversation(id);
-        }
-
-        function deleteConversation(id, event) {
-            window.searchEngine.deleteConversation(id, event);
-        }
-
-        function clearAllConversations() {
-            window.searchEngine.clearAllConversations();
-        }
-
-        function exportConversations() {
-            window.searchEngine.exportConversations();
-        }
-
-        function importConversations(event) {
-            window.searchEngine.importConversations(event);
-        }
-
-        function closeConfirmModal() {
-            window.searchEngine.closeConfirmModal();
-        }
-
-        // Initialize Brecker Search Engine
         document.addEventListener('DOMContentLoaded', () => {
             window.searchEngine = new BreckerSearchEngine();
         });
 
-        // Close modal on escape key
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 closeImageModal();
